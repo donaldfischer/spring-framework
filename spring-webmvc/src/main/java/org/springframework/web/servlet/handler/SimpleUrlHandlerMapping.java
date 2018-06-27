@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2012 the original author or authors.
+ * Copyright 2002-2017 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,9 +16,12 @@
 
 package org.springframework.web.servlet.handler;
 
-import java.util.HashMap;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.Set;
 
 import org.springframework.beans.BeansException;
 import org.springframework.util.CollectionUtils;
@@ -41,11 +44,10 @@ import org.springframework.util.CollectionUtils;
  * If the path doesn't begin with a slash, one is prepended.
  *
  * <p>Supports direct matches (given "/test" -> registered "/test") and "*"
- * matches (given "/test" -> registered "/t*"). Note that the default is
- * to map within the current servlet mapping if applicable; see the
- * {@link #setAlwaysUseFullPath "alwaysUseFullPath"} property for details.
- * For details on the pattern options, see the
- * {@link org.springframework.util.AntPathMatcher} javadoc.
+ * pattern matches (given "/test" -> registered "/t*"). Note that the default
+ * is to map within the current servlet mapping if applicable; see the
+ * {@link #setAlwaysUseFullPath "alwaysUseFullPath"} property. For details on the
+ * pattern options, see the {@link org.springframework.util.AntPathMatcher} javadoc.
 
  * @author Rod Johnson
  * @author Juergen Hoeller
@@ -55,7 +57,7 @@ import org.springframework.util.CollectionUtils;
  */
 public class SimpleUrlHandlerMapping extends AbstractUrlHandlerMapping {
 
-	private final Map<String, Object> urlMap = new HashMap<String, Object>();
+	private final Map<String, Object> urlMap = new LinkedHashMap<>();
 
 
 	/**
@@ -112,12 +114,10 @@ public class SimpleUrlHandlerMapping extends AbstractUrlHandlerMapping {
 	 */
 	protected void registerHandlers(Map<String, Object> urlMap) throws BeansException {
 		if (urlMap.isEmpty()) {
-			logger.warn("Neither 'urlMap' nor 'mappings' set on SimpleUrlHandlerMapping");
+			logger.trace("No patterns in " + formatMappingName());
 		}
 		else {
-			for (Map.Entry<String, Object> entry : urlMap.entrySet()) {
-				String url = entry.getKey();
-				Object handler = entry.getValue();
+			urlMap.forEach((url, handler) -> {
 				// Prepend with slash if not already present.
 				if (!url.startsWith("/")) {
 					url = "/" + url;
@@ -127,6 +127,17 @@ public class SimpleUrlHandlerMapping extends AbstractUrlHandlerMapping {
 					handler = ((String) handler).trim();
 				}
 				registerHandler(url, handler);
+			});
+			if (logger.isDebugEnabled()) {
+				List<String> patterns = new ArrayList<>();
+				if (getRootHandler() != null) {
+					patterns.add("/");
+				}
+				if (getDefaultHandler() != null) {
+					patterns.add("/**");
+				}
+				patterns.addAll(getHandlerMap().keySet());
+				logger.debug("Patterns " + patterns + " in " + formatMappingName());
 			}
 		}
 	}

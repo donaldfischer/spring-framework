@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2014 the original author or authors.
+ * Copyright 2002-2016 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,12 +20,14 @@ import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import javax.servlet.http.HttpSession;
 
+import org.springframework.http.HttpMethod;
+import org.springframework.lang.Nullable;
 import org.springframework.web.servlet.ModelAndView;
 import org.springframework.web.servlet.support.WebContentGenerator;
 import org.springframework.web.util.WebUtils;
 
 /**
- * <p>Convenient superclass for controller implementations, using the Template Method
+ * Convenient superclass for controller implementations, using the Template Method
  * design pattern.
  *
  * <p><b><a name="workflow">Workflow
@@ -37,7 +39,8 @@ import org.springframework.web.util.WebUtils;
  * is not support)</li>
  * <li>If session is required, try to get it (ServletException if not found)</li>
  * <li>Set caching headers if needed according to the cacheSeconds property</li>
- * <li>Call abstract method {@link #handleRequestInternal(HttpServletRequest, HttpServletResponse) handleRequestInternal()}
+ * <li>Call abstract method
+ * {@link #handleRequestInternal(HttpServletRequest, HttpServletResponse) handleRequestInternal()}
  * (optionally synchronizing around the call on the HttpSession),
  * which should be implemented by extending classes to provide actual
  * functionality to return {@link org.springframework.web.servlet.ModelAndView ModelAndView} objects.</li>
@@ -87,11 +90,32 @@ import org.springframework.web.util.WebUtils;
  *
  * @author Rod Johnson
  * @author Juergen Hoeller
+ * @author Rossen Stoyanchev
  * @see WebContentInterceptor
  */
 public abstract class AbstractController extends WebContentGenerator implements Controller {
 
 	private boolean synchronizeOnSession = false;
+
+
+	/**
+	 * Create a new AbstractController which supports
+	 * HTTP methods GET, HEAD and POST by default.
+	 */
+	public AbstractController() {
+		this(true);
+	}
+
+	/**
+	 * Create a new AbstractController.
+	 * @param restrictDefaultSupportedMethods {@code true} if this
+	 * controller should support HTTP methods GET, HEAD and POST by default,
+	 * or {@code false} if it should be unrestricted
+	 * @since 4.3
+	 */
+	public AbstractController(boolean restrictDefaultSupportedMethods) {
+		super(restrictDefaultSupportedMethods);
+	}
 
 
 	/**
@@ -126,11 +150,18 @@ public abstract class AbstractController extends WebContentGenerator implements 
 
 
 	@Override
+	@Nullable
 	public ModelAndView handleRequest(HttpServletRequest request, HttpServletResponse response)
 			throws Exception {
 
+		if (HttpMethod.OPTIONS.matches(request.getMethod())) {
+			response.setHeader("Allow", getAllowHeader());
+			return null;
+		}
+
 		// Delegate to WebContentGenerator for checking and preparing.
-		checkAndPrepare(request, response, this instanceof LastModified);
+		checkRequest(request);
+		prepareResponse(response);
 
 		// Execute handleRequestInternal in synchronized block if required.
 		if (this.synchronizeOnSession) {
@@ -151,7 +182,8 @@ public abstract class AbstractController extends WebContentGenerator implements 
 	 * The contract is the same as for {@code handleRequest}.
 	 * @see #handleRequest
 	 */
+	@Nullable
 	protected abstract ModelAndView handleRequestInternal(HttpServletRequest request, HttpServletResponse response)
-	    throws Exception;
+			throws Exception;
 
 }

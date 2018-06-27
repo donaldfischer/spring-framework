@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2013 the original author or authors.
+ * Copyright 2002-2017 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,10 +20,12 @@ import java.util.Map;
 
 import org.springframework.core.MethodParameter;
 import org.springframework.core.convert.ConversionService;
+import org.springframework.lang.Nullable;
 import org.springframework.messaging.Message;
 import org.springframework.messaging.MessageHandlingException;
 import org.springframework.messaging.handler.annotation.DestinationVariable;
 import org.springframework.messaging.handler.annotation.ValueConstants;
+import org.springframework.util.Assert;
 
 /**
  * Resolves method parameters annotated with
@@ -42,6 +44,7 @@ public class DestinationVariableMethodArgumentResolver extends AbstractNamedValu
 		super(cs, null);
 	}
 
+
 	@Override
 	public boolean supportsParameter(MethodParameter parameter) {
 		return parameter.hasParameterAnnotation(DestinationVariable.class);
@@ -50,18 +53,19 @@ public class DestinationVariableMethodArgumentResolver extends AbstractNamedValu
 	@Override
 	protected NamedValueInfo createNamedValueInfo(MethodParameter parameter) {
 		DestinationVariable annotation = parameter.getParameterAnnotation(DestinationVariable.class);
+		Assert.state(annotation != null, "No DestinationVariable annotation");
 		return new DestinationVariableNamedValueInfo(annotation);
 	}
 
 	@Override
+	@Nullable
 	protected Object resolveArgumentInternal(MethodParameter parameter, Message<?> message, String name)
 			throws Exception {
 
 		@SuppressWarnings("unchecked")
-		Map<String, String> vars = (Map<String, String>) message.getHeaders().get(
-				DESTINATION_TEMPLATE_VARIABLES_HEADER);
-
-		return (vars != null) ? vars.get(name) : null;
+		Map<String, String> vars =
+				(Map<String, String>) message.getHeaders().get(DESTINATION_TEMPLATE_VARIABLES_HEADER);
+		return (vars != null ? vars.get(name) : null);
 	}
 
 	@Override
@@ -77,4 +81,5 @@ public class DestinationVariableMethodArgumentResolver extends AbstractNamedValu
 			super(annotation.value(), true, ValueConstants.DEFAULT_NONE);
 		}
 	}
+
 }

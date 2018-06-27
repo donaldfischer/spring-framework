@@ -25,10 +25,12 @@ import org.apache.commons.logging.LogFactory;
 import org.springframework.beans.factory.config.ConfigurableBeanFactory;
 import org.springframework.core.MethodParameter;
 import org.springframework.core.convert.ConversionService;
+import org.springframework.lang.Nullable;
 import org.springframework.messaging.Message;
 import org.springframework.messaging.MessageHandlingException;
 import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.messaging.support.NativeMessageHeaderAccessor;
+import org.springframework.util.Assert;
 
 /**
  * Resolves method parameters annotated with {@link Header @Header}.
@@ -54,10 +56,12 @@ public class HeaderMethodArgumentResolver extends AbstractNamedValueMethodArgume
 	@Override
 	protected NamedValueInfo createNamedValueInfo(MethodParameter parameter) {
 		Header annotation = parameter.getParameterAnnotation(Header.class);
+		Assert.state(annotation != null, "No Header annotation");
 		return new HeaderNamedValueInfo(annotation);
 	}
 
 	@Override
+	@Nullable
 	protected Object resolveArgumentInternal(MethodParameter parameter, Message<?> message, String name)
 			throws Exception {
 
@@ -69,13 +73,14 @@ public class HeaderMethodArgumentResolver extends AbstractNamedValueMethodArgume
 				logger.warn("Message headers contain two values for the same header '" + name + "', " +
 						"one in the top level header map and a second in the nested map with native headers. " +
 						"Using the value from top level map. " +
-						"Use 'nativeHeader.myHeader' to resolve to the value from the nested native header map." );
+						"Use 'nativeHeader.myHeader' to resolve to the value from the nested native header map.");
 			}
 		}
 
 		return (headerValue != null ? headerValue : nativeHeaderValue);
 	}
 
+	@Nullable
 	private Object getNativeHeaderValue(Message<?> message, String name) {
 		Map<String, List<String>> nativeHeaders = getNativeHeaders(message);
 		if (name.startsWith("nativeHeaders.")) {
@@ -104,7 +109,7 @@ public class HeaderMethodArgumentResolver extends AbstractNamedValueMethodArgume
 	private static class HeaderNamedValueInfo extends NamedValueInfo {
 
 		private HeaderNamedValueInfo(Header annotation) {
-			super(annotation.value(), annotation.required(), annotation.defaultValue());
+			super(annotation.name(), annotation.required(), annotation.defaultValue());
 		}
 	}
 

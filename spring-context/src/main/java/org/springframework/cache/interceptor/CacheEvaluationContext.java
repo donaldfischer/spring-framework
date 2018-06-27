@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2015 the original author or authors.
+ * Copyright 2002-2016 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,15 +17,12 @@
 package org.springframework.cache.interceptor;
 
 import java.lang.reflect.Method;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
+import java.util.HashSet;
+import java.util.Set;
 
-import org.springframework.aop.support.AopUtils;
-import org.springframework.context.expression.AnnotatedElementKey;
+import org.springframework.context.expression.MethodBasedEvaluationContext;
 import org.springframework.core.ParameterNameDiscoverer;
-import org.springframework.expression.spel.support.StandardEvaluationContext;
-import org.springframework.util.ObjectUtils;
+import org.springframework.lang.Nullable;
 
 /**
  * Cache specific evaluation context that adds a method parameters as SpEL
@@ -42,43 +39,27 @@ import org.springframework.util.ObjectUtils;
  *
  * @author Costin Leau
  * @author Stephane Nicoll
+ * @author Juergen Hoeller
  * @since 3.1
  */
-class CacheEvaluationContext extends StandardEvaluationContext {
+class CacheEvaluationContext extends MethodBasedEvaluationContext {
 
-	private final ParameterNameDiscoverer paramDiscoverer;
-
-	private final Method method;
-
-	private final Object[] args;
-
-	private final Class<?> targetClass;
-
-	private final Map<AnnotatedElementKey, Method> methodCache;
-
-	private final List<String> unavailableVariables;
-
-	private boolean paramLoaded = false;
+	private final Set<String> unavailableVariables = new HashSet<>(1);
 
 
-	CacheEvaluationContext(Object rootObject, ParameterNameDiscoverer paramDiscoverer, Method method,
-			Object[] args, Class<?> targetClass, Map<AnnotatedElementKey, Method> methodCache) {
-		super(rootObject);
+	CacheEvaluationContext(Object rootObject, Method method, Object[] arguments,
+			ParameterNameDiscoverer parameterNameDiscoverer) {
 
-		this.paramDiscoverer = paramDiscoverer;
-		this.method = method;
-		this.args = args;
-		this.targetClass = targetClass;
-		this.methodCache = methodCache;
-		this.unavailableVariables = new ArrayList<String>();
+		super(rootObject, method, arguments, parameterNameDiscoverer);
 	}
 
+
 	/**
-	 * Add the specified variable name as unavailable for that context. Any expression trying
-	 * to access this variable should lead to an exception.
-	 * <p>This permits the validation of expressions that could potentially a variable even
-	 * when such variable isn't available yet. Any expression trying to use that variable should
-	 * therefore fail to evaluate.
+	 * Add the specified variable name as unavailable for that context.
+	 * Any expression trying to access this variable should lead to an exception.
+	 * <p>This permits the validation of expressions that could potentially a
+	 * variable even when such variable isn't available yet. Any expression
+	 * trying to use that variable should therefore fail to evaluate.
 	 */
 	public void addUnavailableVariable(String name) {
 		this.unavailableVariables.add(name);
@@ -89,51 +70,12 @@ class CacheEvaluationContext extends StandardEvaluationContext {
 	 * Load the param information only when needed.
 	 */
 	@Override
+	@Nullable
 	public Object lookupVariable(String name) {
 		if (this.unavailableVariables.contains(name)) {
 			throw new VariableNotAvailableException(name);
 		}
-		Object variable = super.lookupVariable(name);
-		if (variable != null) {
-			return variable;
-		}
-		if (!this.paramLoaded) {
-			loadArgsAsVariables();
-			this.paramLoaded = true;
-			variable = super.lookupVariable(name);
-		}
-		return variable;
-	}
-
-	private void loadArgsAsVariables() {
-		// shortcut if no args need to be loaded
-		if (ObjectUtils.isEmpty(this.args)) {
-			return;
-		}
-
-		AnnotatedElementKey methodKey = new AnnotatedElementKey(this.method, this.targetClass);
-		Method targetMethod = this.methodCache.get(methodKey);
-		if (targetMethod == null) {
-			targetMethod = AopUtils.getMostSpecificMethod(this.method, this.targetClass);
-			if (targetMethod == null) {
-				targetMethod = this.method;
-			}
-			this.methodCache.put(methodKey, targetMethod);
-		}
-
-		// save arguments as indexed variables
-		for (int i = 0; i < this.args.length; i++) {
-			setVariable("a" + i, this.args[i]);
-			setVariable("p" + i, this.args[i]);
-		}
-
-		String[] parameterNames = this.paramDiscoverer.getParameterNames(targetMethod);
-		// save parameter names (if discovered)
-		if (parameterNames != null) {
-			for (int i = 0; i < parameterNames.length; i++) {
-				setVariable(parameterNames[i], this.args[i]);
-			}
-		}
+		return super.lookupVariable(name);
 	}
 
 }

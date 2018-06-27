@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2014 the original author or authors.
+ * Copyright 2002-2015 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,12 +22,17 @@ import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.util.Arrays;
+import java.util.Collections;
 
 import org.junit.Test;
 
-import static org.hamcrest.Matchers.*;
-import static org.junit.Assert.*;
-import static org.springframework.web.util.UriComponentsBuilder.*;
+import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.Matchers.instanceOf;
+import static org.hamcrest.Matchers.not;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertThat;
+import static org.springframework.web.util.UriComponentsBuilder.fromUriString;
 
 /**
  * @author Arjen Poutsma
@@ -79,6 +84,16 @@ public class UriComponentsTests {
 		uriComponents = uriComponents.expand("1 2", "3 4");
 		assertEquals("/1 2 3 4", uriComponents.getPath());
 		assertEquals("http://example.com/1 2 3 4", uriComponents.toUriString());
+	}
+
+	// SPR-13311
+
+	@Test
+	public void expandWithRegexVar() {
+		String template = "/myurl/{name:[a-z]{1,5}}/show";
+		UriComponents uriComponents = UriComponentsBuilder.fromUriString(template).build();
+		uriComponents = uriComponents.expand(Collections.singletonMap("name", "test"));
+		assertEquals("/myurl/test/show", uriComponents.getPath());
 	}
 
 	// SPR-12123
@@ -133,25 +148,37 @@ public class UriComponentsTests {
 	}
 
 	@Test
+	public void copyToUriComponentsBuilder() {
+		UriComponents source = UriComponentsBuilder.fromPath("/foo/bar").pathSegment("ba/z").build();
+		UriComponentsBuilder targetBuilder = UriComponentsBuilder.newInstance();
+		source.copyToUriComponentsBuilder(targetBuilder);
+		UriComponents result = targetBuilder.build().encode();
+		assertEquals("/foo/bar/ba%2Fz", result.getPath());
+		assertEquals(Arrays.asList("foo", "bar", "ba%2Fz"), result.getPathSegments());
+	}
+
+	@Test
 	public void equalsHierarchicalUriComponents() throws Exception {
-		UriComponents uriComponents1 = UriComponentsBuilder.fromUriString("http://example.com").path("/{foo}").query("bar={baz}").build();
-		UriComponents uriComponents2 = UriComponentsBuilder.fromUriString("http://example.com").path("/{foo}").query("bar={baz}").build();
-		UriComponents uriComponents3 = UriComponentsBuilder.fromUriString("http://example.com").path("/{foo}").query("bin={baz}").build();
-		assertThat(uriComponents1, instanceOf(HierarchicalUriComponents.class));
-		assertThat(uriComponents1, equalTo(uriComponents1));
-		assertThat(uriComponents1, equalTo(uriComponents2));
-		assertThat(uriComponents1, not(equalTo(uriComponents3)));
+		String url = "http://example.com";
+		UriComponents uric1 = UriComponentsBuilder.fromUriString(url).path("/{foo}").query("bar={baz}").build();
+		UriComponents uric2 = UriComponentsBuilder.fromUriString(url).path("/{foo}").query("bar={baz}").build();
+		UriComponents uric3 = UriComponentsBuilder.fromUriString(url).path("/{foo}").query("bin={baz}").build();
+		assertThat(uric1, instanceOf(HierarchicalUriComponents.class));
+		assertThat(uric1, equalTo(uric1));
+		assertThat(uric1, equalTo(uric2));
+		assertThat(uric1, not(equalTo(uric3)));
 	}
 
 	@Test
 	public void equalsOpaqueUriComponents() throws Exception {
-		UriComponents uriComponents1 = UriComponentsBuilder.fromUriString("http:example.com/foo/bar").build();
-		UriComponents uriComponents2 = UriComponentsBuilder.fromUriString("http:example.com/foo/bar").build();
-		UriComponents uriComponents3 = UriComponentsBuilder.fromUriString("http:example.com/foo/bin").build();
-		assertThat(uriComponents1, instanceOf(OpaqueUriComponents.class));
-		assertThat(uriComponents1, equalTo(uriComponents1));
-		assertThat(uriComponents1, equalTo(uriComponents2));
-		assertThat(uriComponents1, not(equalTo(uriComponents3)));
+		String baseUrl = "http:example.com";
+		UriComponents uric1 = UriComponentsBuilder.fromUriString(baseUrl + "/foo/bar").build();
+		UriComponents uric2 = UriComponentsBuilder.fromUriString(baseUrl + "/foo/bar").build();
+		UriComponents uric3 = UriComponentsBuilder.fromUriString(baseUrl + "/foo/bin").build();
+		assertThat(uric1, instanceOf(OpaqueUriComponents.class));
+		assertThat(uric1, equalTo(uric1));
+		assertThat(uric1, equalTo(uric2));
+		assertThat(uric1, not(equalTo(uric3)));
 	}
 
 }

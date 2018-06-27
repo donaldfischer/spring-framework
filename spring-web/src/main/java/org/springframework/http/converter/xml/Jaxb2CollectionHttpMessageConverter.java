@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2014 the original author or authors.
+ * Copyright 2002-2017 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,7 +16,6 @@
 
 package org.springframework.http.converter.xml;
 
-import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
@@ -32,7 +31,6 @@ import javax.xml.bind.Unmarshaller;
 import javax.xml.bind.annotation.XmlRootElement;
 import javax.xml.bind.annotation.XmlType;
 import javax.xml.stream.XMLInputFactory;
-import javax.xml.stream.XMLResolver;
 import javax.xml.stream.XMLStreamException;
 import javax.xml.stream.XMLStreamReader;
 import javax.xml.transform.Result;
@@ -40,10 +38,15 @@ import javax.xml.transform.Source;
 
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpInputMessage;
+import org.springframework.http.HttpOutputMessage;
 import org.springframework.http.MediaType;
 import org.springframework.http.converter.GenericHttpMessageConverter;
 import org.springframework.http.converter.HttpMessageConversionException;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.http.converter.HttpMessageNotWritableException;
+import org.springframework.lang.Nullable;
+import org.springframework.util.ReflectionUtils;
+import org.springframework.util.xml.StaxUtils;
 
 /**
  * An {@code HttpMessageConverter} that can read XML collections using JAXB2.
@@ -68,7 +71,7 @@ public class Jaxb2CollectionHttpMessageConverter<T extends Collection>
 	 * required generic type information in order to read a Collection.
 	 */
 	@Override
-	public boolean canRead(Class<?> clazz, MediaType mediaType) {
+	public boolean canRead(Class<?> clazz, @Nullable MediaType mediaType) {
 		return false;
 	}
 
@@ -79,7 +82,7 @@ public class Jaxb2CollectionHttpMessageConverter<T extends Collection>
 	 * {@link XmlRootElement} or {@link XmlType}.
 	 */
 	@Override
-	public boolean canRead(Type type, Class<?> contextClass, MediaType mediaType) {
+	public boolean canRead(Type type, @Nullable Class<?> contextClass, @Nullable MediaType mediaType) {
 		if (!(type instanceof ParameterizedType)) {
 			return false;
 		}
@@ -108,7 +111,16 @@ public class Jaxb2CollectionHttpMessageConverter<T extends Collection>
 	 * does not convert collections to XML.
 	 */
 	@Override
-	public boolean canWrite(Class<?> clazz, MediaType mediaType) {
+	public boolean canWrite(Class<?> clazz, @Nullable MediaType mediaType) {
+		return false;
+	}
+
+	/**
+	 * Always returns {@code false} since Jaxb2CollectionHttpMessageConverter
+	 * does not convert collections to XML.
+	 */
+	@Override
+	public boolean canWrite(@Nullable Type type, @Nullable Class<?> clazz, @Nullable MediaType mediaType) {
 		return false;
 	}
 
@@ -126,7 +138,7 @@ public class Jaxb2CollectionHttpMessageConverter<T extends Collection>
 
 	@Override
 	@SuppressWarnings("unchecked")
-	public T read(Type type, Class<?> contextClass, HttpInputMessage inputMessage)
+	public T read(Type type, @Nullable Class<?> contextClass, HttpInputMessage inputMessage)
 			throws IOException, HttpMessageNotReadableException {
 
 		ParameterizedType parameterizedType = (ParameterizedType) type;
@@ -154,7 +166,8 @@ public class Jaxb2CollectionHttpMessageConverter<T extends Collection>
 			return result;
 		}
 		catch (UnmarshalException ex) {
-			throw new HttpMessageNotReadableException("Could not unmarshal to [" + elementClass + "]: " + ex.getMessage(), ex);
+			throw new HttpMessageNotReadableException(
+					"Could not unmarshal to [" + elementClass + "]: " + ex.getMessage(), ex);
 		}
 		catch (JAXBException ex) {
 			throw new HttpMessageConversionException("Could not instantiate JAXBContext: " + ex.getMessage(), ex);
@@ -174,18 +187,17 @@ public class Jaxb2CollectionHttpMessageConverter<T extends Collection>
 	protected T createCollection(Class<?> collectionClass) {
 		if (!collectionClass.isInterface()) {
 			try {
-				return (T) collectionClass.newInstance();
+				return (T) ReflectionUtils.accessibleConstructor(collectionClass).newInstance();
 			}
-			catch (Exception ex) {
+			catch (Throwable ex) {
 				throw new IllegalArgumentException(
-						"Could not instantiate collection class [" +
-								collectionClass.getName() + "]: " + ex.getMessage());
+						"Could not instantiate collection class: " + collectionClass.getName(), ex);
 			}
 		}
-		else if (List.class.equals(collectionClass)) {
+		else if (List.class == collectionClass) {
 			return (T) new ArrayList();
 		}
-		else if (SortedSet.class.equals(collectionClass)) {
+		else if (SortedSet.class == collectionClass) {
 			return (T) new TreeSet();
 		}
 		else {
@@ -217,29 +229,27 @@ public class Jaxb2CollectionHttpMessageConverter<T extends Collection>
 	}
 
 	@Override
+	public void write(T t, @Nullable Type type, @Nullable MediaType contentType, HttpOutputMessage outputMessage)
+			throws IOException, HttpMessageNotWritableException {
+
+		throw new UnsupportedOperationException();
+	}
+
+	@Override
 	protected void writeToResult(T t, HttpHeaders headers, Result result) throws IOException {
 		throw new UnsupportedOperationException();
 	}
 
 	/**
-	 * Create a {@code XMLInputFactory} that this converter will use to create {@link
-	 * javax.xml.stream.XMLStreamReader} and {@link javax.xml.stream.XMLEventReader} objects.
+	 * Create an {@code XMLInputFactory} that this converter will use to create
+	 * {@link javax.xml.stream.XMLStreamReader} and {@link javax.xml.stream.XMLEventReader}
+	 * objects.
 	 * <p>Can be overridden in subclasses, adding further initialization of the factory.
 	 * The resulting factory is cached, so this method will only be called once.
+	 * @see StaxUtils#createDefensiveInputFactory()
 	 */
 	protected XMLInputFactory createXmlInputFactory() {
-		XMLInputFactory inputFactory = XMLInputFactory.newInstance();
-		inputFactory.setProperty(XMLInputFactory.IS_SUPPORTING_EXTERNAL_ENTITIES, false);
-		inputFactory.setXMLResolver(NO_OP_XML_RESOLVER);
-		return inputFactory;
+		return StaxUtils.createDefensiveInputFactory();
 	}
-
-
-	private static final XMLResolver NO_OP_XML_RESOLVER = new XMLResolver() {
-		@Override
-		public Object resolveEntity(String publicID, String systemID, String base, String ns) {
-			return new ByteArrayInputStream(new byte[0]);
-		}
-	};
 
 }
